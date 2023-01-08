@@ -22,3 +22,4 @@ This pulumi template by default will deploy one medium sized lightsail instance 
 
 ---
 
+[![Deploy with Pulumi](https://get.pulumi.com/new/button.svg)](https://app.pulumi.com/new?template=https://github.com/wirelessfuture/simple-taiko-node-aws-pulumi)
