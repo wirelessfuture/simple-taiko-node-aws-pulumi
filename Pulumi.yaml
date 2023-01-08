@@ -1,0 +1,88 @@
+# Configure project names and descriptions with values obtained from `pulumi new`.
+name: ${PROJECT}
+description: ${DESCRIPTION}
+runtime: yaml
+
+# Template configuration
+template:
+  description: Deploy your own lightsail instance on AWS with pulumi
+  config:
+    aws:region:
+      description: The AWS region to deploy into
+      default: us-east-1
+    availabilityZone:
+      description: The availability zone for the AWS region you selected
+      default: us-east-1a
+    ipAddress:
+      description: Your IP address for accessing Grafana Dashboard
+      default: 0.0.0.0/32
+
+# Resource Configuration
+resources:
+  # Keypair for Lightsail instance
+  simpleTaikoNodeKeyPair:
+    type: aws:lightsail:KeyPair
+    properties:
+      name: simple-taiko-node
+
+  # Lightsail instance
+  simpleTaikoNodeInstance:
+    type: aws:lightsail:Instance
+    properties:
+      availabilityZone: ${availabilityZone}
+      blueprintId: ubuntu_20_04
+      bundleId: medium_2_0
+      keyPairName: ${simpleTaikoNodeKeyPair.name}
+      userData: ${launchScript}
+      tags:
+        name: ${simpleTaikoNodeKeyPair.name}
+
+  # Public Ports for the Lightsail instance
+  simpleTaikoNodePublicPorts:
+    type: aws:lightsail:InstancePublicPorts
+    properties:
+      instanceName: ${simpleTaikoNodeInstance.name}
+      portInfos:
+        - protocol: tcp
+          fromPort: 22
+          toPort: 22
+        - protocol: tcp
+          fromPort: 3000
+          toPort: 3000
+          cidrs: ['${ipAddress}']
+
+outputs:
+  # Export the private key of the keypair 
+  keyPairPrivateKey: ${simpleTaikoNodeKeyPair.privateKey}
+
+variables:
+  # Our launch script to setup the instance and pull the taiko node image
+  launchScript: |
+    #!/bin/bash
+    # Redirect stdout/stderr to a file
+    exec >logfile.txt 2>&1
+
+    # Setup the repository for Docker
+    sudo apt-get --assume-yes update
+    sudo apt-get --assume-yes install ca-certificates curl gnupg lsb-release
+    sudo mkdir -p /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    echo \
+      "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+      $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+    # Install the Docker engine
+    sudo apt-get --assume-yes update
+    sudo apt-get --assume-yes install docker-ce docker-ce-cli containerd.io docker-compose-plugin
+
+    # Clone the simple taiko node repo and setup .env file
+    cd home/ubuntu
+    git clone https://github.com/taikoxyz/simple-taiko-node.git
+    cd simple-taiko-node
+    cp .env.sample .env
+    sudo chown -R ubuntu .
+
+    # Pull the latest taiko node image
+    sudo docker compose pull
+
+    exit 0
